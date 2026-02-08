@@ -2,18 +2,35 @@ local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
-local targetName = "GJ0BY"
-local target
 
-local enabledTP, enabledNoclip = false, false
-local connTP, connNoclip
+local enabledTP, enabledNoclip, enabledFly = false, false, false
+local connTP, connNoclip, connFly
 
-local function findTarget()
-    target = Players:FindFirstChild(targetName)
+local flySpeed = 50
+local flyBodyGyro = nil
+local flyBodyVelocity = nil
+
+local targetName = nil
+local target = nil
+
+-- Update target player by name
+local function updateTarget()
+    if targetName then
+        target = Players:FindFirstChild(targetName)
+    else
+        target = nil
+    end
 end
-findTarget()
-Players.PlayerAdded:Connect(findTarget)
 
+-- Update target every second
+spawn(function()
+    while true do
+        updateTarget()
+        wait(1)
+    end
+end)
+
+-- Teleport toggle (stick instantly 2 studs in front)
 local function toggleTP(state)
     enabledTP = state
     if connTP then connTP:Disconnect() connTP = nil end
@@ -36,6 +53,7 @@ local function toggleTP(state)
     end)
 end
 
+-- Noclip toggle
 local function toggleNoclip(state)
     enabledNoclip = state
     if connNoclip then connNoclip:Disconnect() connNoclip = nil end
@@ -59,6 +77,78 @@ local function toggleNoclip(state)
     end)
 end
 
+-- Fly controls
+local function startFly()
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    flyBodyGyro = Instance.new("BodyGyro", hrp)
+    flyBodyGyro.P = 9e4
+    flyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    flyBodyGyro.CFrame = hrp.CFrame
+
+    flyBodyVelocity = Instance.new("BodyVelocity", hrp)
+    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    flyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    connFly = RS.RenderStepped:Connect(function()
+        local moveVec = Vector3.new()
+        if UIS:IsKeyDown(Enum.KeyCode.W) then
+            moveVec = moveVec + workspace.CurrentCamera.CFrame.LookVector
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then
+            moveVec = moveVec - workspace.CurrentCamera.CFrame.LookVector
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then
+            moveVec = moveVec - workspace.CurrentCamera.CFrame.RightVector
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then
+            moveVec = moveVec + workspace.CurrentCamera.CFrame.RightVector
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then
+            moveVec = moveVec + Vector3.new(0, 1, 0)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+            moveVec = moveVec - Vector3.new(0, 1, 0)
+        end
+
+        if moveVec.Magnitude > 0 then
+            moveVec = moveVec.Unit * flySpeed
+            flyBodyVelocity.Velocity = moveVec
+            flyBodyGyro.CFrame = workspace.CurrentCamera.CFrame
+        else
+            flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        end
+    end)
+end
+
+local function stopFly()
+    if connFly then
+        connFly:Disconnect()
+        connFly = nil
+    end
+    if flyBodyGyro then
+        flyBodyGyro:Destroy()
+        flyBodyGyro = nil
+    end
+    if flyBodyVelocity then
+        flyBodyVelocity:Destroy()
+        flyBodyVelocity = nil
+    end
+end
+
+local function toggleFly(state)
+    enabledFly = state
+    if enabledFly then
+        startFly()
+    else
+        stopFly()
+    end
+end
+
 local function preventRagdoll()
     local char = lp.Character
     if not char then return end
@@ -80,27 +170,29 @@ lp.CharacterAdded:Connect(function(char)
     preventRagdoll()
     if enabledTP then toggleTP(true) end
     if enabledNoclip then toggleNoclip(true) end
+    if enabledFly then toggleFly(true) end
 end)
 
 preventRagdoll()
 
+-- GUI Setup
 local gui = Instance.new("ScreenGui", game.CoreGui)
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 180, 0, 100)
-frame.Position = UDim2.new(0.5, -90, 0.1, 0)
+frame.Size = UDim2.new(0, 350, 0, 300)
+frame.Position = UDim2.new(0.5, -175, 0.1, 0)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
 frame.Parent = gui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
+title.Size = UDim2.new(1, 0, 0, 35)
 title.BackgroundTransparency = 1
-title.Text = "Feature Toggles"
+title.Text = "Feature Toggles & Fly Customizer"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.SourceSansBold
-title.TextSize = 20
+title.TextSize = 24
 title.Parent = frame
 
 local dragging = false
@@ -136,12 +228,12 @@ end)
 
 local function createToggleButton(text, position, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 160, 0, 30)
+    btn.Size = UDim2.new(0, 160, 0, 35)
     btn.Position = position
     btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 18
+    btn.TextSize = 20
     btn.Text = text
     btn.Parent = frame
     btn.AutoButtonColor = true
@@ -153,12 +245,205 @@ local function createToggleButton(text, position, callback)
     return btn
 end
 
-local btnTP = createToggleButton("Teleport: OFF", UDim2.new(0, 10, 0, 40), function(btn)
+local function createLabel(text, position)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 30)
+    label.Position = position
+    label.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 20
+    label.Text = text
+    label.Parent = frame
+    return label
+end
+
+local function createDropdown(position, width, height)
+    local dropdownFrame = Instance.new("TextButton")
+    dropdownFrame.Size = UDim2.new(0, width, 0, height)
+    dropdownFrame.Position = position
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    dropdownFrame.BorderSizePixel = 0
+    dropdownFrame.Text = ""
+    dropdownFrame.Parent = frame
+
+    local selectedText = Instance.new("TextLabel")
+    selectedText.Size = UDim2.new(1, -30, 1, 0)
+    selectedText.Position = UDim2.new(0, 5, 0, 0)
+    selectedText.BackgroundTransparency = 1
+    selectedText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    selectedText.Font = Enum.Font.SourceSans
+    selectedText.TextSize = 18
+    selectedText.TextXAlignment = Enum.TextXAlignment.Left
+    selectedText.Text = "Select Player"
+    selectedText.Parent = dropdownFrame
+
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 20, 1, 0)
+    arrow.Position = UDim2.new(1, -25, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.TextColor3 = Color3.fromRGB(255, 255, 255)
+    arrow.Font = Enum.Font.SourceSansBold
+    arrow.TextSize = 20
+    arrow.Text = "▼"
+    arrow.Parent = dropdownFrame
+
+    local listFrame = Instance.new("ScrollingFrame")
+    listFrame.Size = UDim2.new(1, 0, 0, 150)
+    listFrame.Position = UDim2.new(0, 0, 1, 2)
+    listFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    listFrame.BorderSizePixel = 0
+    listFrame.Visible = false
+    listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    listFrame.ScrollBarThickness = 6
+    listFrame.ZIndex = 10
+    listFrame.ClipsDescendants = false
+    listFrame.Parent = dropdownFrame
+
+    local uiListLayout = Instance.new("UIListLayout")
+    uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    uiListLayout.Parent = listFrame
+
+    local function updatePlayers()
+        for _, child in pairs(listFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= lp then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -10, 0, 30)
+                btn.Position = UDim2.new(0, 5, 0, 0)
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.Font = Enum.Font.SourceSans
+                btn.TextSize = 18
+                btn.Text = player.Name
+                btn.Parent = listFrame
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedText.Text = player.Name
+                    targetName = player.Name
+                    updateTarget()
+                    listFrame.Visible = false
+                end)
+            end
+        end
+        wait() -- Yield so UIListLayout updates
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, uiListLayout.AbsoluteContentSize.Y)
+    end
+
+    updatePlayers()
+
+    spawn(function()
+        while true do
+            updatePlayers()
+            wait(1)
+        end
+    end)
+
+    dropdownFrame.MouseButton1Click:Connect(function()
+        listFrame.Visible = not listFrame.Visible
+    end)
+
+    return dropdownFrame, selectedText, listFrame
+end
+
+local function createSlider(position, width, min, max, default, callback)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0, width, 0, 50)
+    sliderFrame.Position = position
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    sliderFrame.BorderSizePixel = 0
+    sliderFrame.Parent = frame
+    sliderFrame.ZIndex = 10
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 18
+    label.Text = "Fly Speed: " .. tostring(default)
+    label.Parent = sliderFrame
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -20, 0, 15)
+    bar.Position = UDim2.new(0, 10, 0, 30)
+    bar.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    bar.Parent = sliderFrame
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    fill.Parent = bar
+
+    local dragging = false
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+
+    bar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    bar.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local relativeX = math.clamp(input.Position.X - bar.AbsolutePosition.X, 0, bar.AbsoluteSize.X)
+            local value = min + (relativeX / bar.AbsoluteSize.X) * (max - min)
+            fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
+            label.Text = "Fly Speed: " .. string.format("%.1f", value)
+            callback(value)
+        end
+    end)
+
+    return sliderFrame
+end
+
+-- Create sections and UI elements positioning
+local yPos = 40
+local sectionSpacing = 10
+
+-- Teleport Section
+createLabel("Teleport", UDim2.new(0, 0, 0, yPos))
+yPos = yPos + 30 + sectionSpacing
+
+local dropdown, selectedText, listFrame = createDropdown(UDim2.new(0, 10, 0, yPos), 330, 35)
+yPos = yPos + 35 + sectionSpacing
+
+local btnTP = createToggleButton("Teleport: OFF", UDim2.new(0, 10, 0, yPos), function(btn)
     toggleTP(not enabledTP)
     btn.Text = "Teleport: " .. (enabledTP and "ON" or "OFF")
 end)
+yPos = yPos + 35 + sectionSpacing
 
-local btnNoclip = createToggleButton("Noclip: OFF", UDim2.new(0, 10, 0, 80), function(btn)
+-- Noclip Section
+createLabel("Noclip", UDim2.new(0, 0, 0, yPos))
+yPos = yPos + 30 + sectionSpacing
+
+local btnNoclip = createToggleButton("Noclip: OFF", UDim2.new(0, 10, 0, yPos), function(btn)
     toggleNoclip(not enabledNoclip)
     btn.Text = "Noclip: " .. (enabledNoclip and "ON" or "OFF")
+end)
+yPos = yPos + 35 + sectionSpacing
+
+-- Fly Section
+createLabel("Fly", UDim2.new(0, 0, 0, yPos))
+yPos = yPos + 30 + sectionSpacing
+
+local btnFly = createToggleButton("Fly: OFF", UDim2.new(0, 10, 0, yPos), function(btn)
+    toggleFly(not enabledFly)
+    btn.Text = "Fly: " .. (enabledFly and "ON" or "OFF")
+end)
+yPos = yPos + 35 + sectionSpacing
+
+local sliderFlySpeed = createSlider(UDim2.new(0, 10, 0, yPos), 330, 10, 200, flySpeed, function(value)
+    flySpeed = value
 end)
