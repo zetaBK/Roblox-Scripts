@@ -1,0 +1,147 @@
+ - Enter your targets name in local targetname = ""
+
+local RS = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local lp = Players.LocalPlayer
+local targetName = "YourTarget"
+local target
+local enabled = false
+local connTP, connInvis, connNoclip, flyBV, flyConn
+local keys = {w=0,s=0,a=0,d=0,q=0,e=0}
+local flySpeed = 50
+
+local function findTarget()
+    target = Players:FindFirstChild(targetName)
+end
+findTarget()
+Players.PlayerAdded:Connect(findTarget)
+
+local function toggleAll(state)
+    enabled = state
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+    
+    -- Cleanup old
+    if connTP then connTP:Disconnect() connTP = nil end
+    if connInvis then connInvis:Disconnect() connInvis = nil end
+    if connNoclip then connNoclip:Disconnect() connNoclip = nil end
+    if flyBV then flyBV:Destroy() flyBV = nil end
+    if flyConn then flyConn:Disconnect() flyConn = nil end
+    
+    if not enabled then return end
+    
+    -- TP (light Heartbeat instead of RenderStepped for Delta stability)
+    connTP = RS.Heartbeat:Connect(function()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, -2)
+            hrp.AssemblyLinearVelocity = Vector3.new()
+            hrp.AssemblyAngularVelocity = Vector3.new()
+            hum.PlatformStand = false
+        end
+    end)
+    
+    -- Invis (simple loop, no heavy desc scan)
+    connInvis = RS.Heartbeat:Connect(function()
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+                v.Transparency = 1
+            elseif v:IsA("Accessory") and v:FindFirstChild("Handle") then
+                v.Handle.Transparency = 1
+            end
+        end
+        hrp.Transparency = 1
+    end)
+    
+    -- Noclip
+    connNoclip = RS.Stepped:Connect(function()
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end)
+    
+    -- Fly
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.MaxForce = Vector3.new(1e4, 1e4, 1e4)
+    flyBV.Parent = hrp
+    flyConn = RS.RenderStepped:Connect(function()
+        local cam = workspace.CurrentCamera
+        local vel = Vector3.new()
+        if keys.w == 1 then vel = vel + cam.CFrame.LookVector end
+        if keys.s == 1 then vel = vel - cam.CFrame.LookVector end
+        if keys.a == 1 then vel = vel - cam.CFrame.RightVector end
+        if keys.d == 1 then vel = vel + cam.CFrame.RightVector end
+        if keys.q == 1 then vel = vel + Vector3.new(0,1,0) end
+        if keys.e == 1 then vel = vel - Vector3.new(0,1,0) end
+        flyBV.Velocity = vel * flySpeed
+    end)
+end
+
+lp.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart", 10)
+    char:WaitForChild("Humanoid", 10)
+    if enabled then toggleAll(true) end  -- re-apply on respawn
+end)
+
+-- Fly keys
+UIS.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local k = input.KeyCode.Name:lower()
+        if keys[k] ~= nil then keys[k] = 1 end
+    end
+end)
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local k = input.KeyCode.Name:lower()
+        if keys[k] ~= nil then keys[k] = 0 end
+    end
+end)
+
+-- Simple GUI: one button
+local gui = Instance.new("ScreenGui")
+gui.Parent = game.CoreGui
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 120, 0, 60)
+frame.Position = UDim2.new(0.5, -60, 0.1, 0)
+frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+frame.Parent = gui
+
+-- Draggable (mobile touch support)
+local dragging, dragStart, startPos
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end
+end)
+frame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(1, 0, 1, 0)
+btn.Text = "ALL OFF"
+btn.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
+btn.TextColor3 = Color3.new(1,1,1)
+btn.Parent = frame
+btn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleAll(enabled)
+    btn.Text = enabled and "ALL ON" or "ALL OFF"
+end)
