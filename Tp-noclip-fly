@@ -1,206 +1,164 @@
 local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 
 local enabledTP = false
-local enabledNoclip = false
-local connTP, connNoclip, connFly
-
-local flySpeed = 50
+local connTP
 
 local function preventRagdoll()
     local char = lp.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-
-    hum.PlatformStand = false
-
-    hum.StateChanged:Connect(function(oldState, newState)
-        if newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.FallingDown then
-            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end
-    end)
+    if hum then
+        hum.PlatformStand = false
+        hum.StateChanged:Connect(function(_, new)
+            if new == Enum.HumanoidStateType.Physics or new == Enum.HumanoidStateType.FallingDown then
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end)
+    end
 end
-
-lp.CharacterAdded:Connect(function(char)
-    char:WaitForChild("HumanoidRootPart", 10)
-    char:WaitForChild("Humanoid", 10)
-    preventRagdoll()
-    if enabledTP then toggleTP(true) end
-    if enabledNoclip then toggleNoclip(true) end
-end)
-
-preventRagdoll()
 
 local function toggleTP(state)
     enabledTP = state
-    if connTP then connTP:Disconnect() connTP = nil end
+    if connTP then connTP:Disconnect() connTP=nil end
     local char = lp.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
-    if not enabledTP then return end
 
-    local targetName = "GJ0BY"
-    local target = Players:FindFirstChild(targetName)
+    local target = Players:FindFirstChild("GJ0BY")
     if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-        warn("Target player '"..targetName.."' not found or no HumanoidRootPart")
+        warn("Target 'GJ0BY' not found")
         return
     end
 
-    local flyBodyGyro = Instance.new("BodyGyro", hrp)
-    flyBodyGyro.P = 9e4
-    flyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    flyBodyGyro.CFrame = hrp.CFrame
+    if not enabledTP then
+        hum.PlatformStand = false
+        -- Re-enable collisions on disable
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+        return
+    end
 
-    local flyBodyVelocity = Instance.new("BodyVelocity", hrp)
-    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    flyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    -- Enable noclip by disabling collisions on all parts
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
 
     connTP = RS.RenderStepped:Connect(function()
-        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            local targetHRP = target.Character.HumanoidRootPart
-            local offset = targetHRP.CFrame.LookVector * 2 + Vector3.new(0, 2, 0)
-            hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
 
-            -- Fly movement: follow camera controls
-            local moveVec = Vector3.new()
-            if UIS:IsKeyDown(Enum.KeyCode.W) then
-                moveVec = moveVec + workspace.CurrentCamera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then
-                moveVec = moveVec - workspace.CurrentCamera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then
-                moveVec = moveVec - workspace.CurrentCamera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then
-                moveVec = moveVec + workspace.CurrentCamera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.Space) then
-                moveVec = moveVec + Vector3.new(0, 1, 0)
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
-                moveVec = moveVec - Vector3.new(0, 1, 0)
-            end
+        local targetHRP = target.Character.HumanoidRootPart
+        local offset = targetHRP.CFrame.LookVector * 2 + Vector3.new(0,2,0)
+        hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
 
-            if moveVec.Magnitude > 0 then
-                moveVec = moveVec.Unit * flySpeed
-                flyBodyVelocity.Velocity = moveVec
-                flyBodyGyro.CFrame = workspace.CurrentCamera.CFrame
-            else
-                flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            end
-
-            hrp.AssemblyLinearVelocity = Vector3.new()
-            hrp.AssemblyAngularVelocity = Vector3.new()
-            hum.PlatformStand = false
-        end
+        hum.PlatformStand = false
     end)
 end
 
-local function toggleNoclip(state)
-    enabledNoclip = state
-    if connNoclip then connNoclip:Disconnect() connNoclip = nil end
-    local char = lp.Character
-    if not char then return end
-    if not enabledNoclip then
-        for _, v in pairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = true
-            end
-        end
-        return
-    end
-
-    connNoclip = RS.Stepped:Connect(function()
-        for _, v in pairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = false
-            end
-        end
-    end)
+local function onCharAdded(char)
+    preventRagdoll()
+    if enabledTP then toggleTP(true) end
 end
 
--- GUI Setup
+lp.CharacterAdded:Connect(onCharAdded)
+if lp.Character then onCharAdded(lp.Character) end
+
+-- GUI
 local gui = Instance.new("ScreenGui", game.CoreGui)
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 150)
-frame.Position = UDim2.new(0.5, -150, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Size = UDim2.new(0, 220, 0, 70)
+frame.Position = UDim2.new(0.5, -110, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 frame.BorderSizePixel = 0
 frame.Parent = gui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1,0,0,25)
 title.BackgroundTransparency = 1
 title.Text = "Zeta's Panel"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.SourceSansBold
-title.TextSize = 26
+title.TextSize = 16
 title.Parent = frame
 
-local dragging = false
-local dragStart = nil
-local startPos = nil
+local btnMinimize = Instance.new("TextButton")
+btnMinimize.Size = UDim2.new(0,25,0,25)
+btnMinimize.Position = UDim2.new(1,-30,0,0)
+btnMinimize.BackgroundColor3 = Color3.fromRGB(50,50,50)
+btnMinimize.TextColor3 = Color3.new(1,1,1)
+btnMinimize.Font = Enum.Font.SourceSansBold
+btnMinimize.TextSize = 18
+btnMinimize.Text = "—"
+btnMinimize.Parent = frame
 
+local minimized = false
+local function setContentVisible(visible)
+    for _, c in pairs(frame:GetChildren()) do
+        if c ~= title and c ~= btnMinimize then
+            c.Visible = visible
+        end
+    end
+end
+
+btnMinimize.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        setContentVisible(false)
+        frame.Size = UDim2.new(0,220,0,30)
+        btnMinimize.Text = "+"
+    else
+        setContentVisible(true)
+        frame.Size = UDim2.new(0,220,0,70)
+        btnMinimize.Text = "—"
+    end
+end)
+
+local dragging, dragStart, startPos = false, nil, nil
 frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = frame.Position
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
         end)
     end
 end)
-
 frame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        if dragging then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
     end
 end)
 
-local function createToggleButton(text, position, callback)
+local function createToggle(text, pos, cb)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 140, 0, 40)
-    btn.Position = position
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Size = UDim2.new(0, 200, 0, 30)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 22
+    btn.TextSize = 14
     btn.Text = text
     btn.Parent = frame
     btn.AutoButtonColor = true
-
-    btn.MouseButton1Click:Connect(function()
-        callback(btn)
-    end)
-
+    btn.MouseButton1Click:Connect(function() cb(btn) end)
     return btn
 end
 
-local btnTP = createToggleButton("Teleport: OFF", UDim2.new(0, 10, 0, 50), function(btn)
+local btnTP = createToggle("Teleport: OFF", UDim2.new(0,10,0,35), function(btn)
     toggleTP(not enabledTP)
     btn.Text = "Teleport: " .. (enabledTP and "ON" or "OFF")
-end)
-
-local btnNoclip = createToggleButton("Noclip: OFF", UDim2.new(0, 160, 0, 50), function(btn)
-    toggleNoclip(not enabledNoclip)
-    btn.Text = "Noclip: " .. (enabledNoclip and "ON" or "OFF")
 end)
