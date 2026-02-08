@@ -1,10 +1,8 @@
- - Enter your targets name in local targetname = ""
-
 local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
-local targetName = "YourTarget"
+local targetName = "GJ0BY"
 local target
 local enabled = false
 local connTP, connInvis, connNoclip, flyBV, flyConn
