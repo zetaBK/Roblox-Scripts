@@ -1,5 +1,63 @@
+local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
+local targetName = "GJ0BY"
+local target
+
+local enabledTP, enabledNoclip = false, false
+local connTP, connNoclip
+
+local function findTarget()
+    target = Players:FindFirstChild(targetName)
+end
+findTarget()
+Players.PlayerAdded:Connect(findTarget)
+
+local function toggleTP(state)
+    enabledTP = state
+    if connTP then connTP:Disconnect() connTP = nil end
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+    if not enabledTP then return end
+
+    connTP = RS.RenderStepped:Connect(function()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = target.Character.HumanoidRootPart
+            local offset = targetHRP.CFrame.LookVector * 2 + Vector3.new(0, 2, 0)
+            hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+            hrp.AssemblyLinearVelocity = Vector3.new()
+            hrp.AssemblyAngularVelocity = Vector3.new()
+            hum.PlatformStand = false
+        end
+    end)
+end
+
+local function toggleNoclip(state)
+    enabledNoclip = state
+    if connNoclip then connNoclip:Disconnect() connNoclip = nil end
+    local char = lp.Character
+    if not char then return end
+    if not enabledNoclip then
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = true
+            end
+        end
+        return
+    end
+
+    connNoclip = RS.Stepped:Connect(function()
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end)
+end
 
 local function preventRagdoll()
     local char = lp.Character
@@ -7,10 +65,8 @@ local function preventRagdoll()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
 
-    -- Disable PlatformStand to prevent ragdoll physics
     hum.PlatformStand = false
 
-    -- Listen for state changes and prevent ragdoll states
     hum.StateChanged:Connect(function(oldState, newState)
         if newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.FallingDown then
             hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -18,11 +74,91 @@ local function preventRagdoll()
     end)
 end
 
--- Run once on script start
-preventRagdoll()
-
--- Reapply on character respawn
 lp.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart", 10)
     char:WaitForChild("Humanoid", 10)
     preventRagdoll()
+    if enabledTP then toggleTP(true) end
+    if enabledNoclip then toggleNoclip(true) end
+end)
+
+preventRagdoll()
+
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 180, 0, 100)
+frame.Position = UDim2.new(0.5, -90, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "Feature Toggles"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+title.Parent = frame
+
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+local function createToggleButton(text, position, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 160, 0, 30)
+    btn.Position = position
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 18
+    btn.Text = text
+    btn.Parent = frame
+    btn.AutoButtonColor = true
+
+    btn.MouseButton1Click:Connect(function()
+        callback(btn)
+    end)
+
+    return btn
+end
+
+local btnTP = createToggleButton("Teleport: OFF", UDim2.new(0, 10, 0, 40), function(btn)
+    toggleTP(not enabledTP)
+    btn.Text = "Teleport: " .. (enabledTP and "ON" or "OFF")
+end)
+
+local btnNoclip = createToggleButton("Noclip: OFF", UDim2.new(0, 10, 0, 80), function(btn)
+    toggleNoclip(not enabledNoclip)
+    btn.Text = "Noclip: " .. (enabledNoclip and "ON" or "OFF")
 end)
