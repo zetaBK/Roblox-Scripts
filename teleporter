@@ -1,5 +1,6 @@
 local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 
 local enabledTP = false
@@ -21,103 +22,105 @@ end
 
 local function toggleTP(state)
     enabledTP = state
-    if connTP then connTP:Disconnect() connTP=nil end
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
+    if connTP then connTP:Disconnect() connTP = nil end
 
-    local target = Players:FindFirstChild("GJ0BY")
-    if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-        warn("Target 'GJ0BY' not found")
-        return
-    end
+    local function startTP()
+        local char = lp.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then return end
 
-    if not enabledTP then
-        hum.PlatformStand = false
-        -- Re-enable collisions on disable
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
+        local target = Players:FindFirstChild("GJ0BY")
+        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
+            warn("Target 'GJ0BY' not found")
+            return
         end
-        return
+
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+
+        connTP = RS.RenderStepped:Connect(function()
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+            if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
+
+            local targetHRP = target.Character.HumanoidRootPart
+            local offset = targetHRP.CFrame.LookVector * 3 + Vector3.new(0, 2, 0)
+            hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+
+            hum.PlatformStand = false
+        end)
     end
 
-    -- Enable noclip by disabling collisions on all parts
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
+    if enabledTP then
+        if not toggleTP.characterAddedConnection then
+            toggleTP.characterAddedConnection = lp.CharacterAdded:Connect(function()
+                if enabledTP then
+                    startTP()
+                    preventRagdoll()
+                end
+            end)
+        end
+        startTP()
+        preventRagdoll()
+    else
+        if connTP then
+            connTP:Disconnect()
+            connTP = nil
+        end
+        local char = lp.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.PlatformStand = false
+            end
+        end
     end
-
-    connTP = RS.RenderStepped:Connect(function()
-        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
-        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
-
-        local targetHRP = target.Character.HumanoidRootPart
-        local offset = targetHRP.CFrame.LookVector * 2 + Vector3.new(0,2,0)
-        hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
-
-        hum.PlatformStand = false
-    end)
 end
 
-local function onCharAdded(char)
-    preventRagdoll()
-    if enabledTP then toggleTP(true) end
-end
+spawn(function()
+    while true do
+        local mouse = lp:GetMouse()
+        local currentX, currentY = mouse.X, mouse.Y
+        UIS:SetMouseLocation(currentX + 1, currentY)
+        wait(0.1)
+        UIS:SetMouseLocation(currentX, currentY)
+        wait(60)
+    end
+end)
 
-lp.CharacterAdded:Connect(onCharAdded)
-if lp.Character then onCharAdded(lp.Character) end
-
--- GUI
 local gui = Instance.new("ScreenGui", game.CoreGui)
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 220, 0, 70)
-frame.Position = UDim2.new(0.5, -110, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.Size = UDim2.new(0, 60, 0, 60)
+frame.Position = UDim2.new(0.5, -30, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
+frame.ClipsDescendants = true
 frame.Parent = gui
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,25)
-title.BackgroundTransparency = 1
-title.Text = "Zeta's Panel"
-title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 16
-title.Parent = frame
+local btnTP = Instance.new("TextButton")
+btnTP.Size = UDim2.new(1, 0, 1, 0)
+btnTP.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+btnTP.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnTP.Font = Enum.Font.SourceSansBold
+btnTP.TextSize = 18
+btnTP.Text = "TP OFF"
+btnTP.Parent = frame
+btnTP.AutoButtonColor = true
 
-local btnMinimize = Instance.new("TextButton")
-btnMinimize.Size = UDim2.new(0,25,0,25)
-btnMinimize.Position = UDim2.new(1,-30,0,0)
-btnMinimize.BackgroundColor3 = Color3.fromRGB(50,50,50)
-btnMinimize.TextColor3 = Color3.new(1,1,1)
-btnMinimize.Font = Enum.Font.SourceSansBold
-btnMinimize.TextSize = 18
-btnMinimize.Text = "—"
-btnMinimize.Parent = frame
-
-local minimized = false
-local function setContentVisible(visible)
-    for _, c in pairs(frame:GetChildren()) do
-        if c ~= title and c ~= btnMinimize then
-            c.Visible = visible
-        end
-    end
-end
-
-btnMinimize.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    if minimized then
-        setContentVisible(false)
-        frame.Size = UDim2.new(0,220,0,30)
-        btnMinimize.Text = "+"
-    else
-        setContentVisible(true)
-        frame.Size = UDim2.new(0,220,0,70)
-        btnMinimize.Text = "—"
-    end
+btnTP.MouseButton1Click:Connect(function()
+    toggleTP(not enabledTP)
+    btnTP.Text = enabledTP and "TP ON" or "TP OFF"
 end)
 
 local dragging, dragStart, startPos = false, nil, nil
@@ -141,24 +144,4 @@ frame.InputChanged:Connect(function(input)
             startPos.Y.Offset + delta.Y
         )
     end
-end)
-
-local function createToggle(text, pos, cb)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 200, 0, 30)
-    btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 14
-    btn.Text = text
-    btn.Parent = frame
-    btn.AutoButtonColor = true
-    btn.MouseButton1Click:Connect(function() cb(btn) end)
-    return btn
-end
-
-local btnTP = createToggle("Teleport: OFF", UDim2.new(0,10,0,35), function(btn)
-    toggleTP(not enabledTP)
-    btn.Text = "Teleport: " .. (enabledTP and "ON" or "OFF")
 end)
