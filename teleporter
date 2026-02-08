@@ -1,147 +1,290 @@
-local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+
 local lp = Players.LocalPlayer
+local TARGET_NAME = "GJ0BY"
+local DIST_AHEAD = 3
+local HEIGHT = 2
 
 local enabledTP = false
-local connTP
+local tpConn = nil
+
+local function getCharParts()
+	local char = lp.Character
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	return char, hrp, hum
+end
+
+local function setNoClip(on)
+	local char = lp.Character
+	if not char then return end
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = not on
+		end
+	end
+end
 
 local function preventRagdoll()
-    local char = lp.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.PlatformStand = false
-        hum.StateChanged:Connect(function(_, new)
-            if new == Enum.HumanoidStateType.Physics or new == Enum.HumanoidStateType.FallingDown then
-                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
-        end)
-    end
+	local _, _, hum = getCharParts()
+	if not hum then return end
+	hum.PlatformStand = false
+	hum.StateChanged:Connect(function(_, newState)
+		if newState == Enum.HumanoidStateType.Physics
+			or newState == Enum.HumanoidStateType.FallingDown
+			or newState == Enum.HumanoidStateType.Ragdoll then
+			pcall(function()
+				hum.PlatformStand = false
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end)
+		end
+	end)
 end
 
-local function toggleTP(state)
-    enabledTP = state
-    if connTP then connTP:Disconnect() connTP = nil end
-
-    local function startTP()
-        local char = lp.Character
-        if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum then return end
-
-        local target = Players:FindFirstChild("GJ0BY")
-        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-            warn("Target 'GJ0BY' not found")
-            return
-        end
-
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-
-        connTP = RS.RenderStepped:Connect(function()
-            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
-            if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
-
-            local targetHRP = target.Character.HumanoidRootPart
-            local offset = targetHRP.CFrame.LookVector * 3 + Vector3.new(0, 2, 0)
-            hrp.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
-
-            hum.PlatformStand = false
-        end)
-    end
-
-    if enabledTP then
-        if not toggleTP.characterAddedConnection then
-            toggleTP.characterAddedConnection = lp.CharacterAdded:Connect(function()
-                if enabledTP then
-                    startTP()
-                    preventRagdoll()
-                end
-            end)
-        end
-        startTP()
-        preventRagdoll()
-    else
-        if connTP then
-            connTP:Disconnect()
-            connTP = nil
-        end
-        local char = lp.Character
-        if char then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = true
-                end
-            end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.PlatformStand = false
-            end
-        end
-    end
+local function getTargetHRP()
+	local target = Players:FindFirstChild(TARGET_NAME)
+	if not target then return nil end
+	local ch = target.Character
+	if not ch then return nil end
+	return ch:FindFirstChild("HumanoidRootPart")
 end
 
-spawn(function()
-    while true do
-        local mouse = lp:GetMouse()
-        local currentX, currentY = mouse.X, mouse.Y
-        UIS:SetMouseLocation(currentX + 1, currentY)
-        wait(0.1)
-        UIS:SetMouseLocation(currentX, currentY)
-        wait(60)
-    end
+local function stopTP()
+	if tpConn then tpConn:Disconnect() tpConn = nil end
+	setNoClip(false)
+end
+
+local function startTP()
+	stopTP()
+	local _, hrp, hum = getCharParts()
+	if not hrp or not hum then return end
+	setNoClip(true)
+	preventRagdoll()
+	tpConn = RS.RenderStepped:Connect(function()
+		if not enabledTP then return end
+		local _, hrpNow, humNow = getCharParts()
+		if not hrpNow or not humNow then return end
+		local targetHRP = getTargetHRP()
+		if not targetHRP then return end
+		local offset = targetHRP.CFrame.LookVector * DIST_AHEAD + Vector3.new(0, HEIGHT, 0)
+		pcall(function()
+			hrpNow.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+			humNow.PlatformStand = false
+		end)
+	end)
+end
+
+local function setEnabled(on)
+	enabledTP = on
+	if enabledTP then
+		startTP()
+	else
+		stopTP()
+	end
+end
+
+lp.CharacterAdded:Connect(function()
+	if enabledTP then
+		startTP()
+	end
 end)
 
-local gui = Instance.new("ScreenGui", game.CoreGui)
+task.spawn(function()
+	while true do
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new(0, 0))
+		end)
+		task.wait(45)
+	end
+end)
+
+-- GUI Creation
+local gui = Instance.new("ScreenGui")
+gui.Name = "ZetasTpGui"
 gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = game.CoreGui
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 60, 0, 60)
-frame.Position = UDim2.new(0.5, -30, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-frame.BorderSizePixel = 0
-frame.ClipsDescendants = true
-frame.Parent = gui
+local root = Instance.new("Frame")
+root.Name = "Root"
+root.Position = UDim2.new(0, 16, 0.18, 0)
+root.Size = UDim2.new(0, 170, 0, 56)
+root.BackgroundTransparency = 1
+root.Parent = gui
 
-local btnTP = Instance.new("TextButton")
-btnTP.Size = UDim2.new(1, 0, 1, 0)
-btnTP.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-btnTP.TextColor3 = Color3.fromRGB(255, 255, 255)
-btnTP.Font = Enum.Font.SourceSansBold
-btnTP.TextSize = 18
-btnTP.Text = "TP OFF"
-btnTP.Parent = frame
-btnTP.AutoButtonColor = true
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(1, 0, 1, 0)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+panel.BorderSizePixel = 0
+panel.Parent = root
 
-btnTP.MouseButton1Click:Connect(function()
-    toggleTP(not enabledTP)
-    btnTP.Text = enabledTP and "TP ON" or "TP OFF"
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 14)
+corner.Parent = panel
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(80, 80, 95)
+stroke.Thickness = 1
+stroke.Transparency = 0.35
+stroke.Parent = panel
+
+local glow = Instance.new("ImageLabel")
+glow.BackgroundTransparency = 1
+glow.Size = UDim2.new(1, 26, 1, 26)
+glow.Position = UDim2.new(0, -13, 0, -13)
+glow.Image = "rbxassetid://8992230677"
+glow.ImageColor3 = Color3.fromRGB(130, 120, 255)
+glow.ImageTransparency = 0.78
+glow.ScaleType = Enum.ScaleType.Slice
+glow.SliceCenter = Rect.new(32, 32, 96, 96)
+glow.Parent = panel
+
+local header = Instance.new("TextLabel")
+header.BackgroundTransparency = 1
+header.Position = UDim2.new(0, 12, 0, 8)
+header.Size = UDim2.new(1, -24, 0, 18)
+header.Font = Enum.Font.GothamBold
+header.TextSize = 12
+header.TextXAlignment = Enum.TextXAlignment.Left
+header.TextColor3 = Color3.fromRGB(245, 245, 255)
+header.Text = "Zeta's Tp"
+header.Parent = panel
+local sub = Instance.new("TextLabel")
+sub.BackgroundTransparency = 1
+sub.Position = UDim2.new(0, 12, 0, 26)
+sub.Size = UDim2.new(1, -24, 0, 16)
+sub.Font = Enum.Font.Gotham
+sub.TextSize = 10
+sub.TextXAlignment = Enum.TextXAlignment.Left
+sub.TextColor3 = Color3.fromRGB(190, 190, 205)
+sub.Text = "Target: "..TARGET_NAME
+sub.Parent = panel
+
+local toggle = Instance.new("TextButton")
+toggle.AutoButtonColor = false
+toggle.BackgroundColor3 = Color3.fromRGB(35, 35, 44)
+toggle.Position = UDim2.new(1, -52, 0.5, -16)
+toggle.Size = UDim2.new(0, 40, 0, 32)
+toggle.Text = ""
+toggle.Parent = panel
+
+local tCorner = Instance.new("UICorner")
+tCorner.CornerRadius = UDim.new(0, 10)
+tCorner.Parent = toggle
+
+local tStroke = Instance.new("UIStroke")
+tStroke.Color = Color3.fromRGB(95, 95, 120)
+tStroke.Transparency = 0.35
+tStroke.Parent = toggle
+
+local dot = Instance.new("Frame")
+dot.Size = UDim2.new(0, 18, 0, 18)
+dot.Position = UDim2.new(0, 7, 0.5, -9)
+dot.BackgroundColor3 = Color3.fromRGB(220, 90, 90)
+dot.BorderSizePixel = 0
+dot.Parent = toggle
+
+local dCorner = Instance.new("UICorner")
+dCorner.CornerRadius = UDim.new(1, 0)
+dCorner.Parent = dot
+
+local minimize = Instance.new("TextButton")
+minimize.AutoButtonColor = false
+minimize.BackgroundTransparency = 1
+minimize.Position = UDim2.new(1, -22, 0, 8)
+minimize.Size = UDim2.new(0, 16, 0, 16)
+minimize.Font = Enum.Font.GothamBold
+minimize.TextSize = 14
+minimize.TextColor3 = Color3.fromRGB(210, 210, 230)
+minimize.Text = "–"
+minimize.Parent = panel
+
+local dragHandle = Instance.new("TextButton")
+dragHandle.AutoButtonColor = false
+dragHandle.BackgroundTransparency = 1
+dragHandle.Position = UDim2.new(0, 0, 0, 0)
+dragHandle.Size = UDim2.new(1, -60, 1, 0)
+dragHandle.Text = ""
+dragHandle.Parent = panel
+
+local minimized = false
+local fullSize = root.Size
+local miniSize = UDim2.new(0, 56, 0, 56)
+
+local function applyVisualState()
+	if enabledTP then
+		dot.BackgroundColor3 = Color3.fromRGB(110, 230, 160)
+		tStroke.Color = Color3.fromRGB(110, 230, 160)
+		glow.ImageColor3 = Color3.fromRGB(110, 230, 160)
+	else
+		dot.BackgroundColor3 = Color3.fromRGB(230, 100, 110)
+		tStroke.Color = Color3.fromRGB(140, 120, 255)
+		glow.ImageColor3 = Color3.fromRGB(140, 120, 255)
+	end
+end
+
+applyVisualState()
+
+toggle.Activated:Connect(function()
+	setEnabled(not enabledTP)
+	applyVisualState()
 end)
 
-local dragging, dragStart, startPos = false, nil, nil
-frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
-    end
+local function setMinimized(on)
+	minimized = on
+	if minimized then
+		root.Size = miniSize
+		header.Visible = false
+		sub.Visible = false
+		toggle.Visible = false
+		dragHandle.Size = UDim2.new(1, 0, 1, 0)
+		minimize.Text = "+"
+	else
+		root.Size = fullSize
+		header.Visible = true
+		sub.Visible = true
+		toggle.Visible = true
+		dragHandle.Size = UDim2.new(1, -60, 1, 0)
+		minimize.Text = "–"
+	end
+end
+
+minimize.Activated:Connect(function()
+	setMinimized(not minimized)
 end)
-frame.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        frame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
+
+do
+	local dragging = false
+	local dragStartPos = Vector2.new(0, 0)
+	local startUDim = root.Position
+
+	local function inputPos(input)
+		return Vector2.new(input.Position.X, input.Position.Y)
+	end
+
+	dragHandle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStartPos = inputPos(input)
+			startUDim = root.Position
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(input)
+		if not dragging then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+		local delta = inputPos(input) - dragStartPos
+		root.Position = UDim2.new(startUDim.X.Scale, startUDim.X.Offset + delta.X, startUDim.Y.Scale, startUDim.Y.Offset + delta.Y)
+	end)
+
+	UIS.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
