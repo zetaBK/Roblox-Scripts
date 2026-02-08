@@ -64,7 +64,7 @@ local function startTP()
 	if not hrp or not hum then return end
 	setNoClip(true)
 	preventRagdoll()
-	tpConn = RS.RenderStepped:Connect(function()
+	tpConn = RS.Heartbeat:Connect(function()
 		if not enabledTP then return end
 		local _, hrpNow, humNow = getCharParts()
 		if not hrpNow or not humNow then return end
@@ -87,23 +87,25 @@ local function setEnabled(on)
 	end
 end
 
+-- Always reconnect teleport on character respawn immediately, no delay
 lp.CharacterAdded:Connect(function()
 	if enabledTP then
 		startTP()
 	end
 end)
 
+-- Anti-AFK simulation loop with no delay between clicks (only minimal wait to avoid freeze)
 task.spawn(function()
 	while true do
 		pcall(function()
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton2(Vector2.new(0, 0))
 		end)
-		task.wait(45)
+		task.wait(0.1) -- minimal wait to prevent freezing, effectively continuous
 	end
 end)
 
--- GUI Creation
+-- GUI Creation without minimizer
 local gui = Instance.new("ScreenGui")
 gui.Name = "ZetasTpGui"
 gui.ResetOnSpawn = false
@@ -193,16 +195,28 @@ local dCorner = Instance.new("UICorner")
 dCorner.CornerRadius = UDim.new(1, 0)
 dCorner.Parent = dot
 
-local minimize = Instance.new("TextButton")
-minimize.AutoButtonColor = false
-minimize.BackgroundTransparency = 1
-minimize.Position = UDim2.new(1, -22, 0, 8)
-minimize.Size = UDim2.new(0, 16, 0, 16)
-minimize.Font = Enum.Font.GothamBold
-minimize.TextSize = 14
-minimize.TextColor3 = Color3.fromRGB(210, 210, 230)
-minimize.Text = "–"
-minimize.Parent = panel
+local dragging = false
+local dragStartPos = Vector2.new(0, 0)
+local startUDim = root.Position
+
+local function inputPos(input)
+	return Vector2.new(input.Position.X, input.Position.Y)
+end
+
+toggle.Activated:Connect(function()
+	enabledTP = not enabledTP
+	if enabledTP then
+		startTP()
+		dot.BackgroundColor3 = Color3.fromRGB(110, 230, 160)
+		tStroke.Color = Color3.fromRGB(110, 230, 160)
+		glow.ImageColor3 = Color3.fromRGB(110, 230, 160)
+	else
+		stopTP()
+		dot.BackgroundColor3 = Color3.fromRGB(230, 100, 110)
+		tStroke.Color = Color3.fromRGB(140, 120, 255)
+		glow.ImageColor3 = Color3.fromRGB(140, 120, 255)
+	end
+end)
 
 local dragHandle = Instance.new("TextButton")
 dragHandle.AutoButtonColor = false
@@ -212,79 +226,23 @@ dragHandle.Size = UDim2.new(1, -60, 1, 0)
 dragHandle.Text = ""
 dragHandle.Parent = panel
 
-local minimized = false
-local fullSize = root.Size
-local miniSize = UDim2.new(0, 56, 0, 56)
-
-local function applyVisualState()
-	if enabledTP then
-		dot.BackgroundColor3 = Color3.fromRGB(110, 230, 160)
-		tStroke.Color = Color3.fromRGB(110, 230, 160)
-		glow.ImageColor3 = Color3.fromRGB(110, 230, 160)
-	else
-		dot.BackgroundColor3 = Color3.fromRGB(230, 100, 110)
-		tStroke.Color = Color3.fromRGB(140, 120, 255)
-		glow.ImageColor3 = Color3.fromRGB(140, 120, 255)
+dragHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStartPos = inputPos(input)
+		startUDim = root.Position
 	end
-end
-
-applyVisualState()
-
-toggle.Activated:Connect(function()
-	setEnabled(not enabledTP)
-	applyVisualState()
 end)
 
-local function setMinimized(on)
-	minimized = on
-	if minimized then
-		root.Size = miniSize
-		header.Visible = false
-		sub.Visible = false
-		toggle.Visible = false
-		dragHandle.Size = UDim2.new(1, 0, 1, 0)
-		minimize.Text = "+"
-	else
-		root.Size = fullSize
-		header.Visible = true
-		sub.Visible = true
-		toggle.Visible = true
-		dragHandle.Size = UDim2.new(1, -60, 1, 0)
-		minimize.Text = "–"
-	end
-end
-
-minimize.Activated:Connect(function()
-	setMinimized(not minimized)
+UIS.InputChanged:Connect(function(input)
+	if not dragging then return end
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+	local delta = inputPos(input) - dragStartPos
+	root.Position = UDim2.new(startUDim.X.Scale, startUDim.X.Offset + delta.X, startUDim.Y.Scale, startUDim.Y.Offset + delta.Y)
 end)
 
-do
-	local dragging = false
-	local dragStartPos = Vector2.new(0, 0)
-	local startUDim = root.Position
-
-	local function inputPos(input)
-		return Vector2.new(input.Position.X, input.Position.Y)
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
 	end
-
-	dragHandle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStartPos = inputPos(input)
-			startUDim = root.Position
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(input)
-		if not dragging then return end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-		local delta = inputPos(input) - dragStartPos
-		root.Position = UDim2.new(startUDim.X.Scale, startUDim.X.Offset + delta.X, startUDim.Y.Scale, startUDim.Y.Offset + delta.Y)
-	end)
-
-	UIS.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-end
+end)
