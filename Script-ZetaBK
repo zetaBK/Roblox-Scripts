@@ -1,198 +1,28 @@
-local RS = game:GetService("RunService")
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
-local targetName = "GJ0BY"
-local target
-local tpConn, noclipConn, invisConn, flyConn
-local enabledTP = true
-local enabledInvis = false
-local enabledNoclip = false
-local enabledFly = false
-local flySpeed = 50
-local keys = {w=0,s=0,a=0,d=0,q=0,e=0}
-local flyBV
 
-local function findTarget()
-    target = Players:FindFirstChild(targetName)
-end
-findTarget()
-Players.PlayerAdded:Connect(findTarget)
+local function preventRagdoll()
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
 
-local function setupChar(char)
-    local hrp = char:WaitForChild("HumanoidRootPart", 10)
-    local hum = char:WaitForChild("Humanoid", 10)
-    if not hrp or not hum then return end
-    
-    -- TP
-    if tpConn then tpConn:Disconnect() end
-    tpConn = RS.RenderStepped:Connect(function()
-        if enabledTP and target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            local thrp = target.Character.HumanoidRootPart
-            hrp.CFrame = thrp.CFrame * CFrame.new(0, 2, -2)
-            hrp.AssemblyLinearVelocity = Vector3.new()
-            hrp.AssemblyAngularVelocity = Vector3.new()
-            hum.PlatformStand = false
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.FlyingNoPhysics, false)
-            local state = hum:GetState()
-            if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Physics then
-                hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-            end
-            local thum = target.Character:FindFirstChild("Humanoid")
-            local thrp2 = target.Character:FindFirstChild("HumanoidRootPart")
-            if thum and thrp2 then
-                thum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                thrp2.AssemblyLinearVelocity = Vector3.new()
-                thrp2.AssemblyAngularVelocity = Vector3.new()
-            end
+    -- Disable PlatformStand to prevent ragdoll physics
+    hum.PlatformStand = false
+
+    -- Listen for state changes and prevent ragdoll states
+    hum.StateChanged:Connect(function(oldState, newState)
+        if newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.FallingDown then
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
     end)
-    
-    -- Invis
-    if invisConn then invisConn:Disconnect() end
-    if enabledInvis then
-        invisConn = RS.Heartbeat:Connect(function()
-            for _, v in pairs(char:GetDescendants()) do
-                if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
-                    v.Transparency = 1
-                elseif v:IsA("Accessory") and v:FindFirstChild("Handle") then
-                    v.Handle.Transparency = 1
-                end
-            end
-            hrp.Transparency = 1
-        end)
-    end
-    
-    -- Noclip
-    if noclipConn then noclipConn:Disconnect() end
-    if enabledNoclip then
-        noclipConn = RS.Stepped:Connect(function()
-            for _, v in pairs(char:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.CanCollide = false
-                end
-            end
-        end)
-    end
-    
-    -- Fly
-    if enabledFly then
-        if flyBV then flyBV:Destroy() end
-        flyBV = Instance.new("BodyVelocity")
-        flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        flyBV.Parent = hrp
-        if flyConn then flyConn:Disconnect() end
-        flyConn = RS.RenderStepped:Connect(function()
-            if enabledFly and flyBV and flyBV.Parent then
-                local cam = workspace.CurrentCamera
-                local vel = Vector3.new()
-                if keys.w == 1 then vel += cam.CFrame.LookVector end
-                if keys.s == 1 then vel -= cam.CFrame.LookVector end
-                if keys.a == 1 then vel -= cam.CFrame.RightVector end
-                if keys.d == 1 then vel += cam.CFrame.RightVector end
-                if keys.q == 1 then vel += Vector3.new(0,1,0) end
-                if keys.e == 1 then vel -= Vector3.new(0,1,0) end
-                flyBV.Velocity = vel.Unit * flySpeed
-            end
-        end)
-    else
-        if flyBV then flyBV:Destroy() flyBV = nil end
-        if flyConn then flyConn:Disconnect() end
-    end
 end
 
-lp.CharacterAdded:Connect(setupChar)
-if lp.Character then setupChar(lp.Character) end
+-- Run once on script start
+preventRagdoll()
 
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    local key = input.KeyCode.Name:lower()
-    if keys[key] ~= nil then keys[key] = 1 end
+-- Reapply on character respawn
+lp.CharacterAdded:Connect(function(char)
+    char:WaitForChild("Humanoid", 10)
+    preventRagdoll()
 end)
-UserInputService.InputEnded:Connect(function(input, gp)
-    if gp then return end
-    local key = input.KeyCode.Name:lower()
-    if keys[key] ~= nil then keys[key] = 0 end
-end)
-
--- Draggable GUI
-local gui = Instance.new("ScreenGui")
-gui.Parent = game.CoreGui
-gui.ResetOnSpawn = false
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 130, 0, 220)
-frame.Position = UDim2.new(0.5, -65, 0, 10)
-frame.BackgroundColor3 = Color3.new(0,0,0)
-frame.BorderSizePixel = 0
-frame.Parent = gui
-
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-    local delta = input.Position - dragStart
-    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
-
-frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-frame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
-    end
-end)
-
-local function makeButton(text, posY, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -10, 0, 40)
-    btn.Position = UDim2.new(0, 5, 0, posY)
-    btn.Text = text
-    btn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Parent = frame
-    btn.MouseButton1Click:Connect(callback)
-    return btn
-end
-
-local tpBtn = makeButton("TP: ON", 5, function()
-    enabledTP = not enabledTP
-    tpBtn.Text = enabledTP and "TP: ON" or "TP: OFF"
-end)
-
-local invisBtn = makeButton("Invis: OFF", 50, function()
-    enabledInvis = not enabledInvis
-    invisBtn.Text = enabledInvis and "Invis: ON" or "Invis: OFF"
-    if lp.Character then setupChar(lp.Character) end
-end)
-
-local noclipBtn = makeButton("Noclip: OFF", 95, function()
-    enabledNoclip = not enabledNoclip
-    noclipBtn.Text = enabledNoclip and "Noclip: ON" or "Noclip: OFF"
-    if lp.Character then setupChar(lp.Character) end
-end)
-
-local flyBtn = makeButton("Fly: OFF", 140, function()
-    enabledFly = not enabledFly
-    flyBtn.Text = enabledFly and "Fly: ON" or "Fly: OFF"
-    if lp.Character then setupChar(lp.Character) end
-end)
-
-local closeBtn = makeButton("Close", 185, function() gui:Destroy() end)
