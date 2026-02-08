@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local lp = Players.LocalPlayer
 local TARGET_NAME = "GJ0BY"
@@ -62,13 +63,28 @@ local function setEnabled(on)
 	end
 end
 
+-- Restart teleport loop immediately on respawn
 lp.CharacterAdded:Connect(function()
 	if enabledTP then
 		startTP()
 	end
 end)
 
--- GUI Creation: Black draggable box with text "TP"
+-- Anti-AFK loop to keep player active
+task.spawn(function()
+	while true do
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new(0, 0))
+		end)
+		task.wait(0.1)
+	end
+end)
+
+-- Start teleporting initially disabled
+setEnabled(false)
+
+-- GUI Creation: simple black draggable box labeled "TP"
 local gui = Instance.new("ScreenGui")
 gui.Name = "SimpleTPGui"
 gui.ResetOnSpawn = false
@@ -79,7 +95,7 @@ local root = Instance.new("Frame")
 root.Name = "Root"
 root.Size = UDim2.new(0, 100, 0, 40)
 root.Position = UDim2.new(0, 20, 0, 100)
-root.BackgroundColor3 = Color3.new(0, 0, 0) -- black box
+root.BackgroundColor3 = Color3.new(0, 0, 0)
 root.BorderSizePixel = 0
 root.Parent = gui
 
@@ -89,7 +105,7 @@ label.BackgroundTransparency = 1
 label.Text = "TP"
 label.Font = Enum.Font.GothamBold
 label.TextSize = 20
-label.TextColor3 = Color3.new(1, 1, 1) -- white text
+label.TextColor3 = Color3.new(1, 1, 1)
 label.Parent = root
 
 local toggle = Instance.new("TextButton")
@@ -133,5 +149,5 @@ end)
 
 toggle.Activated:Connect(function()
 	setEnabled(not enabledTP)
-	label.TextColor3 = enabledTP and Color3.new(0, 1, 0) or Color3.new(1, 1, 1) -- green when enabled, white when disabled
+	label.TextColor3 = enabledTP and Color3.new(0, 1, 0) or Color3.new(1, 1, 1)
 end)
