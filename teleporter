@@ -63,14 +63,16 @@ local function setEnabled(on)
 	end
 end
 
--- Restart teleport loop immediately on respawn
-lp.CharacterAdded:Connect(function()
-	if enabledTP then
+-- Restart teleport loop immediately on respawn, waiting for HumanoidRootPart to exist
+lp.CharacterAdded:Connect(function(character)
+	if not enabledTP then return end
+	local hrp = character:WaitForChild("HumanoidRootPart", 10)
+	if hrp then
 		startTP()
 	end
 end)
 
--- Anti-AFK loop to keep player active
+-- Anti-AFK loop to keep player active continuously
 task.spawn(function()
 	while true do
 		pcall(function()
