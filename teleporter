@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
 
 local lp = Players.LocalPlayer
 local TARGET_NAME = "GJ0BY"
@@ -19,32 +18,6 @@ local function getCharParts()
 	return char, hrp, hum
 end
 
-local function setNoClip(on)
-	local char = lp.Character
-	if not char then return end
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = not on
-		end
-	end
-end
-
-local function preventRagdoll()
-	local _, _, hum = getCharParts()
-	if not hum then return end
-	hum.PlatformStand = false
-	hum.StateChanged:Connect(function(_, newState)
-		if newState == Enum.HumanoidStateType.Physics
-			or newState == Enum.HumanoidStateType.FallingDown
-			or newState == Enum.HumanoidStateType.Ragdoll then
-			pcall(function()
-				hum.PlatformStand = false
-				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			end)
-		end
-	end)
-end
-
 local function getTargetHRP()
 	local target = Players:FindFirstChild(TARGET_NAME)
 	if not target then return nil end
@@ -54,22 +27,24 @@ local function getTargetHRP()
 end
 
 local function stopTP()
-	if tpConn then tpConn:Disconnect() tpConn = nil end
-	setNoClip(false)
+	if tpConn then
+		tpConn:Disconnect()
+		tpConn = nil
+	end
 end
 
 local function startTP()
 	stopTP()
 	local _, hrp, hum = getCharParts()
 	if not hrp or not hum then return end
-	setNoClip(true)
-	preventRagdoll()
+
 	tpConn = RS.Heartbeat:Connect(function()
 		if not enabledTP then return end
 		local _, hrpNow, humNow = getCharParts()
 		if not hrpNow or not humNow then return end
 		local targetHRP = getTargetHRP()
 		if not targetHRP then return end
+
 		local offset = targetHRP.CFrame.LookVector * DIST_AHEAD + Vector3.new(0, HEIGHT, 0)
 		pcall(function()
 			hrpNow.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
@@ -87,162 +62,76 @@ local function setEnabled(on)
 	end
 end
 
--- Always reconnect teleport on character respawn immediately, no delay
 lp.CharacterAdded:Connect(function()
 	if enabledTP then
 		startTP()
 	end
 end)
 
--- Anti-AFK simulation loop with no delay between clicks (only minimal wait to avoid freeze)
-task.spawn(function()
-	while true do
-		pcall(function()
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton2(Vector2.new(0, 0))
-		end)
-		task.wait(0.1) -- minimal wait to prevent freezing, effectively continuous
-	end
-end)
-
--- GUI Creation without minimizer
+-- GUI Creation: Black draggable box with text "TP"
 local gui = Instance.new("ScreenGui")
-gui.Name = "ZetasTpGui"
+gui.Name = "SimpleTPGui"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = game.CoreGui
 
 local root = Instance.new("Frame")
 root.Name = "Root"
-root.Position = UDim2.new(0, 16, 0.18, 0)
-root.Size = UDim2.new(0, 170, 0, 56)
-root.BackgroundTransparency = 1
+root.Size = UDim2.new(0, 100, 0, 40)
+root.Position = UDim2.new(0, 20, 0, 100)
+root.BackgroundColor3 = Color3.new(0, 0, 0) -- black box
+root.BorderSizePixel = 0
 root.Parent = gui
 
-local panel = Instance.new("Frame")
-panel.Size = UDim2.new(1, 0, 1, 0)
-panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-panel.BorderSizePixel = 0
-panel.Parent = root
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 14)
-corner.Parent = panel
-
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(80, 80, 95)
-stroke.Thickness = 1
-stroke.Transparency = 0.35
-stroke.Parent = panel
-
-local glow = Instance.new("ImageLabel")
-glow.BackgroundTransparency = 1
-glow.Size = UDim2.new(1, 26, 1, 26)
-glow.Position = UDim2.new(0, -13, 0, -13)
-glow.Image = "rbxassetid://8992230677"
-glow.ImageColor3 = Color3.fromRGB(130, 120, 255)
-glow.ImageTransparency = 0.78
-glow.ScaleType = Enum.ScaleType.Slice
-glow.SliceCenter = Rect.new(32, 32, 96, 96)
-glow.Parent = panel
-
-local header = Instance.new("TextLabel")
-header.BackgroundTransparency = 1
-header.Position = UDim2.new(0, 12, 0, 8)
-header.Size = UDim2.new(1, -24, 0, 18)
-header.Font = Enum.Font.GothamBold
-header.TextSize = 12
-header.TextXAlignment = Enum.TextXAlignment.Left
-header.TextColor3 = Color3.fromRGB(245, 245, 255)
-header.Text = "Zeta's Tp"
-header.Parent = panel
-local sub = Instance.new("TextLabel")
-sub.BackgroundTransparency = 1
-sub.Position = UDim2.new(0, 12, 0, 26)
-sub.Size = UDim2.new(1, -24, 0, 16)
-sub.Font = Enum.Font.Gotham
-sub.TextSize = 10
-sub.TextXAlignment = Enum.TextXAlignment.Left
-sub.TextColor3 = Color3.fromRGB(190, 190, 205)
-sub.Text = "Target: "..TARGET_NAME
-sub.Parent = panel
+local label = Instance.new("TextLabel")
+label.Size = UDim2.new(1, 0, 1, 0)
+label.BackgroundTransparency = 1
+label.Text = "TP"
+label.Font = Enum.Font.GothamBold
+label.TextSize = 20
+label.TextColor3 = Color3.new(1, 1, 1) -- white text
+label.Parent = root
 
 local toggle = Instance.new("TextButton")
-toggle.AutoButtonColor = false
-toggle.BackgroundColor3 = Color3.fromRGB(35, 35, 44)
-toggle.Position = UDim2.new(1, -52, 0.5, -16)
-toggle.Size = UDim2.new(0, 40, 0, 32)
+toggle.Size = UDim2.new(1, 0, 1, 0)
+toggle.BackgroundTransparency = 1
 toggle.Text = ""
-toggle.Parent = panel
-
-local tCorner = Instance.new("UICorner")
-tCorner.CornerRadius = UDim.new(0, 10)
-tCorner.Parent = toggle
-
-local tStroke = Instance.new("UIStroke")
-tStroke.Color = Color3.fromRGB(95, 95, 120)
-tStroke.Transparency = 0.35
-tStroke.Parent = toggle
-
-local dot = Instance.new("Frame")
-dot.Size = UDim2.new(0, 18, 0, 18)
-dot.Position = UDim2.new(0, 7, 0.5, -9)
-dot.BackgroundColor3 = Color3.fromRGB(220, 90, 90)
-dot.BorderSizePixel = 0
-dot.Parent = toggle
-
-local dCorner = Instance.new("UICorner")
-dCorner.CornerRadius = UDim.new(1, 0)
-dCorner.Parent = dot
+toggle.Parent = root
 
 local dragging = false
-local dragStartPos = Vector2.new(0, 0)
-local startUDim = root.Position
+local dragStartPos = Vector2.new()
+local startPos = UDim2.new()
 
 local function inputPos(input)
 	return Vector2.new(input.Position.X, input.Position.Y)
 end
 
-toggle.Activated:Connect(function()
-	enabledTP = not enabledTP
-	if enabledTP then
-		startTP()
-		dot.BackgroundColor3 = Color3.fromRGB(110, 230, 160)
-		tStroke.Color = Color3.fromRGB(110, 230, 160)
-		glow.ImageColor3 = Color3.fromRGB(110, 230, 160)
-	else
-		stopTP()
-		dot.BackgroundColor3 = Color3.fromRGB(230, 100, 110)
-		tStroke.Color = Color3.fromRGB(140, 120, 255)
-		glow.ImageColor3 = Color3.fromRGB(140, 120, 255)
-	end
-end)
-
-local dragHandle = Instance.new("TextButton")
-dragHandle.AutoButtonColor = false
-dragHandle.BackgroundTransparency = 1
-dragHandle.Position = UDim2.new(0, 0, 0, 0)
-dragHandle.Size = UDim2.new(1, -60, 1, 0)
-dragHandle.Text = ""
-dragHandle.Parent = panel
-
-dragHandle.InputBegan:Connect(function(input)
+toggle.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
 		dragStartPos = inputPos(input)
-		startUDim = root.Position
+		startPos = root.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
 	end
 end)
 
 UIS.InputChanged:Connect(function(input)
-	if not dragging then return end
-	if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-	local delta = inputPos(input) - dragStartPos
-	root.Position = UDim2.new(startUDim.X.Scale, startUDim.X.Offset + delta.X, startUDim.Y.Scale, startUDim.Y.Offset + delta.Y)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = inputPos(input) - dragStartPos
+		root.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end
 end)
 
-UIS.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = false
-	end
+toggle.Activated:Connect(function()
+	setEnabled(not enabledTP)
+	label.TextColor3 = enabledTP and Color3.new(0, 1, 0) or Color3.new(1, 1, 1) -- green when enabled, white when disabled
 end)
