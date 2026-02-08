@@ -1,74 +1,82 @@
 local Players = game:GetService("Players")
-local RS = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
-local lp = Players.LocalPlayer
-local TARGET_NAME = "GJ0BY"
-local DIST_AHEAD = 3
-local HEIGHT = 2
+local localPlayer = Players.LocalPlayer
+local TARGET_NAME = "GJ0BY" -- Change this to your target player name
+local DISTANCE_AHEAD = 3
+local HEIGHT_OFFSET = 2
 
-local enabledTP = false
-local tpConn = nil
+local teleportEnabled = false
+local teleportConnection = nil
 
-local function getCharParts()
-	local char = lp.Character
-	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	return char, hrp, hum
+-- Get character parts safely
+local function getCharacterParts()
+	local character = localPlayer.Character
+	if not character then return nil end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if hrp and humanoid then
+		return character, hrp, humanoid
+	end
+	return nil
 end
 
+-- Get target player's HumanoidRootPart safely
 local function getTargetHRP()
-	local target = Players:FindFirstChild(TARGET_NAME)
-	if not target then return nil end
-	local ch = target.Character
-	if not ch then return nil end
-	return ch:FindFirstChild("HumanoidRootPart")
+	local targetPlayer = Players:FindFirstChild(TARGET_NAME)
+	if not targetPlayer then return nil end
+	local targetChar = targetPlayer.Character
+	if not targetChar then return nil end
+	return targetChar:FindFirstChild("HumanoidRootPart")
 end
 
-local function stopTP()
-	if tpConn then
-		tpConn:Disconnect()
-		tpConn = nil
+-- Stop teleport loop safely
+local function stopTeleport()
+	if teleportConnection then
+		teleportConnection:Disconnect()
+		teleportConnection = nil
 	end
 end
 
-local function startTP()
-	stopTP()
-	local _, hrp, hum = getCharParts()
-	if not hrp or not hum then return end
+-- Start teleport loop safely
+local function startTeleport()
+	stopTeleport()
+	local _, hrp, humanoid = getCharacterParts()
+	if not hrp or not humanoid then return end
 
-	tpConn = RS.Heartbeat:Connect(function()
-		if not enabledTP then return end
-		local _, hrpNow, humNow = getCharParts()
-		if not hrpNow or not humNow then return end
+	teleportConnection = RunService.Heartbeat:Connect(function()
+		if not teleportEnabled then return end
+		local _, currentHRP, currentHumanoid = getCharacterParts()
+		if not currentHRP or not currentHumanoid then return end
 		local targetHRP = getTargetHRP()
 		if not targetHRP then return end
 
-		local offset = targetHRP.CFrame.LookVector * DIST_AHEAD + Vector3.new(0, HEIGHT, 0)
+		local offset = targetHRP.CFrame.LookVector * DISTANCE_AHEAD + Vector3.new(0, HEIGHT_OFFSET, 0)
 		pcall(function()
-			hrpNow.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
-			humNow.PlatformStand = false
+			currentHRP.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+			currentHumanoid.PlatformStand = false
 		end)
 	end)
 end
 
-local function setEnabled(on)
-	enabledTP = on
-	if enabledTP then
-		startTP()
+-- Enable or disable teleporting
+local function setTeleportEnabled(state)
+	teleportEnabled = state
+	if teleportEnabled then
+		startTeleport()
 	else
-		stopTP()
+		stopTeleport()
 	end
 end
 
--- Restart teleport loop immediately on respawn, waiting for HumanoidRootPart to exist
-lp.CharacterAdded:Connect(function(character)
-	if not enabledTP then return end
+-- On character respawn, wait for HumanoidRootPart then restart teleport loop if enabled
+localPlayer.CharacterAdded:Connect(function(character)
+	if not teleportEnabled then return end
 	local hrp = character:WaitForChild("HumanoidRootPart", 10)
 	if hrp then
-		startTP()
+		startTeleport()
 	end
 end)
 
@@ -83,23 +91,23 @@ task.spawn(function()
 	end
 end)
 
--- Start teleporting initially disabled
-setEnabled(false)
+-- Start disabled by default
+setTeleportEnabled(false)
 
--- GUI Creation: simple black draggable box labeled "TP"
+-- GUI: simple black draggable box labeled "TP"
 local gui = Instance.new("ScreenGui")
-gui.Name = "SimpleTPGui"
+gui.Name = "TeleportToggleGui"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = game.CoreGui
 
-local root = Instance.new("Frame")
-root.Name = "Root"
-root.Size = UDim2.new(0, 100, 0, 40)
-root.Position = UDim2.new(0, 20, 0, 100)
-root.BackgroundColor3 = Color3.new(0, 0, 0)
-root.BorderSizePixel = 0
-root.Parent = gui
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 100, 0, 40)
+frame.Position = UDim2.new(0, 20, 0, 100)
+frame.BackgroundColor3 = Color3.new(0, 0, 0)
+frame.BorderSizePixel = 0
+frame.Parent = gui
 
 local label = Instance.new("TextLabel")
 label.Size = UDim2.new(1, 0, 1, 0)
@@ -108,27 +116,27 @@ label.Text = "TP"
 label.Font = Enum.Font.GothamBold
 label.TextSize = 20
 label.TextColor3 = Color3.new(1, 1, 1)
-label.Parent = root
+label.Parent = frame
 
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(1, 0, 1, 0)
-toggle.BackgroundTransparency = 1
-toggle.Text = ""
-toggle.Parent = root
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(1, 0, 1, 0)
+button.BackgroundTransparency = 1
+button.Text = ""
+button.Parent = frame
 
 local dragging = false
 local dragStartPos = Vector2.new()
-local startPos = UDim2.new()
+local frameStartPos = UDim2.new()
 
-local function inputPos(input)
+local function getInputPosition(input)
 	return Vector2.new(input.Position.X, input.Position.Y)
 end
 
-toggle.InputBegan:Connect(function(input)
+button.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
-		dragStartPos = inputPos(input)
-		startPos = root.Position
+		dragStartPos = getInputPosition(input)
+		frameStartPos = frame.Position
 		input.Changed:Connect(function()
 			if input.UserInputState == Enum.UserInputState.End then
 				dragging = false
@@ -137,19 +145,19 @@ toggle.InputBegan:Connect(function(input)
 	end
 end)
 
-UIS.InputChanged:Connect(function(input)
+UserInputService.InputChanged:Connect(function(input)
 	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = inputPos(input) - dragStartPos
-		root.Position = UDim2.new(
-			startPos.X.Scale,
-			startPos.X.Offset + delta.X,
-			startPos.Y.Scale,
-			startPos.Y.Offset + delta.Y
+		local delta = getInputPosition(input) - dragStartPos
+		frame.Position = UDim2.new(
+			frameStartPos.X.Scale,
+			frameStartPos.X.Offset + delta.X,
+			frameStartPos.Y.Scale,
+			frameStartPos.Y.Offset + delta.Y
 		)
 	end
 end)
 
-toggle.Activated:Connect(function()
-	setEnabled(not enabledTP)
-	label.TextColor3 = enabledTP and Color3.new(0, 1, 0) or Color3.new(1, 1, 1)
+button.Activated:Connect(function()
+	setTeleportEnabled(not teleportEnabled)
+	label.TextColor3 = teleportEnabled and Color3.new(0, 1, 0) or Color3.new(1, 1, 1)
 end)
